@@ -1,0 +1,21 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: notification-system
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# Custom property - which app instance this is (set via env var in Docker Compose later)
+# Used by /api/instance-info and in logs to prove multi-instance behavior in the demo
+notification:
+  instance-id: ${INSTANCE_ID:local-dev}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

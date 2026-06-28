@@ -1,0 +1,74 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.4.2'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.bhupinder'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+ext {
+	set('testcontainersVersion', "1.20.4")
+}
+
+dependencies {
+	// Core web + websocket
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+	// Redis (Pub/Sub backbone)
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+	// Validation for REST DTOs (e.g. POST /api/notify request body)
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	// Actuator - health checks, useful for proving instance is alive in demo
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	// Lombok - cuts boilerplate on DTOs/entities
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// --- Test dependencies ---
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-websocket' // WebSocket test client lives here too
+
+	// Awaitility - essential for async/timing assertions (sub-1s delivery, race conditions)
+	testImplementation 'org.awaitility:awaitility:4.2.2'
+
+	// Testcontainers - declared but currently UNUSED for Redis in this project's tests.
+	// Testcontainers' Docker client can't reach Docker Desktop's socket on this
+	// machine (confirmed via direct debugging), so tests connect to a Redis
+	// instance started externally via docker-compose.test.yml instead.
+	// Left in the build in case this is revisited on a different machine/environment.
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:testcontainers'
+
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.testcontainers:testcontainers-bom:${testcontainersVersion}"
+	}
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

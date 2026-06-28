@@ -1,0 +1,7 @@
+build/
+.gradle/
+*.tar.gz
+test-client/
+.git/
+.gitignore
+README.md

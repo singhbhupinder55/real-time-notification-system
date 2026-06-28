@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Notification System - Manual Test Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body { font-family: monospace; max-width: 700px; margin: 40px auto; padding: 0 16px; }
+        input, button { font-size: 14px; padding: 6px; margin: 4px 0; }
+        #log { background: #111; color: #0f0; padding: 12px; height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        .row { margin-bottom: 8px; }
+        label { display: inline-block; width: 90px; }
+    </style>
+</head>
+<body>
+<h2>Notification System — Manual Test Client</h2>
+
+<div class="row">
+    <label>Server URL:</label>
+    <input id="serverUrl" value="ws://localhost:8080/ws" size="40">
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+</div>
+
+<div class="row">
+    <label>Topic:</label>
+    <input id="topic" value="user-1" size="20">
+    <button onclick="subscribe()">Subscribe</button>
+</div>
+
+<div class="row">
+    <label>Message:</label>
+    <input id="message" value="hello from test client" size="30">
+    <button onclick="publish()">Publish (POST /api/notify)</button>
+</div>
+
+<div class="row">
+    <button onclick="checkInstance()">Check Instance (GET /api/instance-info)</button>
+    <button onclick="checkInstanceRepeatedly()">Check Instance x10 (prove round-robin)</button>
+</div>
+
+<div id="log"></div>
+
+<script>
+    let stompClient = null;
+    const log = (msg) => {
+        const el = document.getElementById('log');
+        const ts = new Date().toISOString().split('T')[1].slice(0, -1);
+        el.textContent += `[${ts}] ${msg}\n`;
+        el.scrollTop = el.scrollHeight;
+    };
+
+    function connect() {
+        const url = document.getElementById('serverUrl').value;
+        // Plain WebSocket - must match a ws:// or wss:// URL, since our server
+        // registered the STOMP endpoint WITHOUT .withSockJS() fallback.
+        const wsUrl = url.replace(/^http/, 'ws');
+        stompClient = Stomp.client(wsUrl);
+        stompClient.connect({}, () => {
+            log('CONNECTED to ' + wsUrl);
+        }, (err) => {
+            log('CONNECT ERROR: ' + JSON.stringify(err));
+        });
+    }
+
+    function disconnect() {
+        if (stompClient) {
+            stompClient.disconnect(() => log('DISCONNECTED'));
+        }
+    }
+
+    function subscribe() {
+        const topic = document.getElementById('topic').value;
+        const destination = '/topics/' + topic;
+        stompClient.subscribe(destination, (frame) => {
+            const receivedAt = Date.now();
+            const body = JSON.parse(frame.body);
+            const latency = receivedAt - body.publishedAtEpochMillis;
+            log(`RECEIVED on ${destination}: ${frame.body}  (delivered in ${latency}ms)`);
+        });
+        log('SUBSCRIBED to ' + destination);
+    }
+
+    async function publish() {
+        const topic = document.getElementById('topic').value;
+        const message = document.getElementById('message').value;
+        const res = await fetch('http://localhost:8080/api/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, message })
+        });
+        const body = await res.json();
+        log('PUBLISHED via REST: ' + JSON.stringify(body));
+    }
+
+    async function checkInstance() {
+        const res = await fetch('http://localhost:8080/api/instance-info');
+        const body = await res.json();
+        log('INSTANCE INFO: ' + JSON.stringify(body));
+    }
+
+    async function checkInstanceRepeatedly() {
+        log('--- checking instance 10 times to show round-robin distribution ---');
+        const counts = {};
+        for (let i = 0; i < 10; i++) {
+            const res = await fetch('http://localhost:8080/api/instance-info');
+            const body = await res.json();
+            counts[body.instanceId] = (counts[body.instanceId] || 0) + 1;
+            log(`  request ${i + 1}: instanceId=${body.instanceId}`);
+        }
+        log('--- distribution: ' + JSON.stringify(counts) + ' ---');
+    }
+</script>
+</body>
+</html>

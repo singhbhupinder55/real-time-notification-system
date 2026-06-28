@@ -1,0 +1,31 @@
+# Test profile overrides.
+#
+# server.port: 0 -> Spring Boot picks a random free port. Combined with
+# @SpringBootTest(webEnvironment = RANDOM_PORT), this means tests never
+# collide with a manually-running `./gradlew bootRun` on 8080, and multiple
+# test classes can run without port conflicts.
+#
+# spring.data.redis.port: 6380 -> points at the Redis container started via
+# `docker compose -f docker-compose.test.yml up -d` (see AbstractIntegrationTest
+# for why this is a fixed externally-managed container rather than
+# Testcontainers-managed). Deliberately different from your manual dev Redis
+# on 6379 so test runs never silently read/write your manual-testing data.
+server:
+  port: 0
+  tomcat:
+    # Default max threads (200) is comfortably above our 100-client fan-out
+    # test, but set explicitly rather than relying on the default - if
+    # CLIENT_COUNT ever grows, this is the first knob to revisit, and an
+    # explicit value here documents that we've actually thought about it
+    # rather than gotten lucky.
+    threads:
+      max: 250
+
+notification:
+  instance-id: test-instance
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6380

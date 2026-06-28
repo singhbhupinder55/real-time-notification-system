@@ -1,0 +1,67 @@
+# Multi-instance distributed demo. This is the file that makes the resume's
+# "distributed across multiple instances behind a load balancer" claim a
+# thing you can literally run, not just describe.
+#
+# Topology: client -> nginx (port 8080) -> app1 OR app2 (round-robin) -> Redis
+#
+# Both app1 and app2 subscribe to the SAME Redis channel on startup
+# (RedisConfig, wired since Phase 2). That's what makes "a client connected
+# to app1 receives a notification published via app2" actually work - each
+# instance only knows about its OWN locally-connected WebSocket clients,
+# and Redis is the only thing that lets them coordinate.
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: notification-system-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+  app1:
+    build: .
+    container_name: notification-system-app1
+    environment:
+      - INSTANCE_ID=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        # "service_healthy" (not just "service_started") - depends_on alone
+        # only waits for the Redis CONTAINER to start, not for Redis itself
+        # to be ready to accept connections or for Docker's internal DNS to
+        # have fully registered the "redis" hostname. Without this, app1/app2
+        # can race ahead and fail with UnknownHostException on a fresh
+        # `docker compose up`, even though Redis comes up successfully a
+        # moment later. Tying the wait to the healthcheck above closes that gap.
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  app2:
+    build: .
+    container_name: notification-system-app2
+    environment:
+      - INSTANCE_ID=2
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: notification-system-nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - app1
+      - app2

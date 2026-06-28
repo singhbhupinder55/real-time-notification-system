@@ -1,0 +1,8 @@
+services:
+  redis-test:
+    image: redis:7-alpine
+    container_name: notification-system-redis-test
+    ports:
+      - "6380:6379"  # 6380 on host, deliberately different from your manual dev Redis on 6379 -
+                      # lets you run tests and `bootRun` against your normal Redis at the same time
+                      # without them colliding.
