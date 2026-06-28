@@ -1,0 +1,84 @@
+name: CI
+
+# Runs the full test suite on every push and pull request to main.
+#
+# SCOPE NOTE: this is CI (continuous integration - automated test verification
+# on every change), not CD (continuous deployment). Deployment for this
+# project is intentionally NOT automated: the AWS EC2 phase was a deliberate
+# short-lived demo (provision, prove the distributed-delivery claim, capture
+# evidence, terminate) rather than a standing deployment, to avoid ongoing
+# cost for a portfolio project. Automating deploys on every push would mean
+# either always-on AWS infrastructure (cost) or a spin-up/spin-down deploy
+# workflow on every commit (slow, and not representative of how this project
+# is actually meant to be demoed). CI still provides the real, ongoing value:
+# every push is verified against the full test suite, including the
+# concurrency/race-condition integration tests, before it could be merged.
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # GitHub Actions' built-in service container support - functionally
+    # equivalent to docker-compose.test.yml's standalone Redis container,
+    # just expressed in the Actions-native way. Available to every step in
+    # this job at localhost:6379, matching this project's Redis defaults
+    # exactly, so no host/port override is needed in application-test.yml.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      # Caches Gradle dependencies between runs - same dependency set our
+      # Dockerfile's build stage resolves, cached here so CI doesn't
+      # re-download the whole dependency tree on every push.
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run full test suite
+        run: ./gradlew test --no-daemon
+        env:
+          # Our test-resources/application-test.yml already points at
+          # localhost:6380 for the local docker-compose.test.yml workflow.
+          # In CI, the Redis service container above is on localhost:6379
+          # (GitHub Actions' default Redis port mapping), so we override
+          # here rather than maintain a second test properties file.
+          SPRING_DATA_REDIS_HOST: localhost
+          SPRING_DATA_REDIS_PORT: 6379
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: build/test-results/test/
