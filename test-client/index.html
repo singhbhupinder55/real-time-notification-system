@@ -50,10 +50,13 @@
         el.scrollTop = el.scrollHeight;
     };
 
+    function restBaseUrl() {
+        const url = document.getElementById('serverUrl').value;
+        return url.replace(/^ws/, 'http').replace(/\/ws$/, '');
+    }
+
     function connect() {
         const url = document.getElementById('serverUrl').value;
-        // Plain WebSocket - must match a ws:// or wss:// URL, since our server
-        // registered the STOMP endpoint WITHOUT .withSockJS() fallback.
         const wsUrl = url.replace(/^http/, 'ws');
         stompClient = Stomp.client(wsUrl);
         stompClient.connect({}, () => {
@@ -84,29 +87,41 @@
     async function publish() {
         const topic = document.getElementById('topic').value;
         const message = document.getElementById('message').value;
-        const res = await fetch('http://localhost:8080/api/notify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic, message })
-        });
-        const body = await res.json();
-        log('PUBLISHED via REST: ' + JSON.stringify(body));
+        try {
+            const res = await fetch(restBaseUrl() + '/api/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic, message })
+            });
+            const body = await res.json();
+            log('PUBLISHED via REST: ' + JSON.stringify(body));
+        } catch (err) {
+            log('PUBLISH ERROR: ' + err.message + ' (check browser console for CORS/network details)');
+        }
     }
 
     async function checkInstance() {
-        const res = await fetch('http://localhost:8080/api/instance-info');
-        const body = await res.json();
-        log('INSTANCE INFO: ' + JSON.stringify(body));
+        try {
+            const res = await fetch(restBaseUrl() + '/api/instance-info');
+            const body = await res.json();
+            log('INSTANCE INFO: ' + JSON.stringify(body));
+        } catch (err) {
+            log('CHECK INSTANCE ERROR: ' + err.message);
+        }
     }
 
     async function checkInstanceRepeatedly() {
         log('--- checking instance 10 times to show round-robin distribution ---');
         const counts = {};
         for (let i = 0; i < 10; i++) {
-            const res = await fetch('http://localhost:8080/api/instance-info');
-            const body = await res.json();
-            counts[body.instanceId] = (counts[body.instanceId] || 0) + 1;
-            log(`  request ${i + 1}: instanceId=${body.instanceId}`);
+            try {
+                const res = await fetch(restBaseUrl() + '/api/instance-info');
+                const body = await res.json();
+                counts[body.instanceId] = (counts[body.instanceId] || 0) + 1;
+                log(`  request ${i + 1}: instanceId=${body.instanceId}`);
+            } catch (err) {
+                log(`  request ${i + 1}: ERROR ${err.message}`);
+            }
         }
         log('--- distribution: ' + JSON.stringify(counts) + ' ---');
     }
